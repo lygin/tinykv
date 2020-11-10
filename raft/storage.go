@@ -16,6 +16,7 @@ package raft
 
 import (
 	"errors"
+	"reflect"
 	"sync"
 
 	"github.com/pingcap-incubator/tinykv/log"
@@ -51,6 +52,7 @@ type Storage interface {
 	// MaxSize limits the total size of the log entries returned, but
 	// Entries returns at least one entry if any.
 	Entries(lo, hi uint64) ([]pb.Entry, error)
+	HeadEntry() (pb.Entry)
 	// Term returns the term of entry i, which must be in the range
 	// [FirstIndex()-1, LastIndex()]. The term of the entry before
 	// FirstIndex is retained for matching purposes even though the
@@ -95,6 +97,9 @@ func NewMemoryStorage() *MemoryStorage {
 
 // InitialState implements the Storage interface.
 func (ms *MemoryStorage) InitialState() (pb.HardState, pb.ConfState, error) {
+	if reflect.DeepEqual(ms.snapshot, pb.Snapshot{}) {
+		ms.snapshot = pb.Snapshot{Metadata: &pb.SnapshotMetadata{ConfState: &pb.ConfState{}}}
+	}
 	return ms.hardState, *ms.snapshot.Metadata.ConfState, nil
 }
 
@@ -104,6 +109,12 @@ func (ms *MemoryStorage) SetHardState(st pb.HardState) error {
 	defer ms.Unlock()
 	ms.hardState = st
 	return nil
+}
+
+func (ms *MemoryStorage) HeadEntry() (pb.Entry) {
+	ms.Lock()
+	defer ms.Unlock()
+	return ms.ents[0]
 }
 
 // Entries implements the Storage interface.
